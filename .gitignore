@@ -1,0 +1,4 @@
+models/arcface_torch/*
+checkpoints/*
+**__pycache__
+BFM/

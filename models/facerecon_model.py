@@ -1,6 +1,7 @@
 """This script defines the face reconstruction model for Deep3DFaceRecon_pytorch
 """
 
+import json
 import numpy as np
 import torch
 from .base_model import BaseModel
@@ -221,7 +222,13 @@ class FaceReconModel(BaseModel):
         pred_lm = self.pred_lm.cpu().numpy()
         pred_lm = np.stack([pred_lm[:,:,0],self.input_img.shape[2]-1-pred_lm[:,:,1]],axis=2) # transfer to image coordinate
         pred_coeffs['lm68'] = pred_lm
-        savemat(name,pred_coeffs)
 
-
+        if '.mat' in name:
+            savemat(name,pred_coeffs)
+        elif '.json' in name:
+            meta = pred_coeffs.copy()
+            for key in pred_coeffs:
+                meta[key] = pred_coeffs[key].tolist()
+            with open(name, 'w') as f:
+                json.dump(meta, f, indent=4)
 
