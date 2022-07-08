@@ -221,8 +221,8 @@ class FaceReconModel(BaseModel):
         pred_coeffs = {key:self.pred_coeffs_dict[key].cpu().numpy() for key in self.pred_coeffs_dict}
         pred_lm = self.pred_lm.cpu().numpy()
         pred_lm = np.stack([pred_lm[:,:,0],self.input_img.shape[2]-1-pred_lm[:,:,1]],axis=2) # transfer to image coordinate
-        pred_coeffs['lm2d68'] = pred_lm
-        pred_coeffs['lm3d68'] = self.pred_vertex[:,self.facemodel.keypoints].cpu().numpy()
+        pred_coeffs['lm68'] = pred_lm
+        pred_coeffs['pt3d_68'] = self.pred_vertex[:,self.facemodel.keypoints].cpu().numpy()
 
         if '.mat' in name:
             savemat(name,pred_coeffs)
