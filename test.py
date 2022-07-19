@@ -14,6 +14,21 @@ import torch
 from data.flist_dataset import default_flist_reader
 from scipy.io import loadmat, savemat
 
+
+def get_all_data_path(root):
+    
+    batchs = sorted(os.listdir(root))
+    im_paths = []
+    lm_paths = []
+    for b in batchs:
+        b_path = os.path.join(root, b)
+        im_path = [os.path.join(b_path, i) for i in sorted(os.listdir(b_path)) if i.endswith('png') or i.endswith('jpg')]
+        lm_path = [i.replace('images', 'detections').replace('png', 'txt').replace('jpg', 'txt') for i in im_path]
+        im_paths += im_path
+        lm_paths += lm_path
+    
+    return im_paths, lm_paths
+
 def get_data_path(root='examples'):
     
     im_path = [os.path.join(root, i) for i in sorted(os.listdir(root)) if i.endswith('png') or i.endswith('jpg')]
@@ -45,13 +60,15 @@ def main(rank, opt, name='examples'):
     model.eval()
     visualizer = MyVisualizer(opt)
 
-    im_path, lm_path = get_data_path(name)
+    # im_path, lm_path = get_data_path(name)
+    im_path, lm_path = get_all_data_path(name)
     lm3d_std = load_lm3d(opt.bfm_folder) 
 
     for i in range(len(im_path)):
         print(i, im_path[i])
         img_name = im_path[i].split(os.path.sep)[-1].replace('.png','').replace('.jpg','')
         if not os.path.isfile(lm_path[i]):
+            print(lm_path[i] + 'is not a file')
             continue
         im_tensor, lm_tensor = read_data(im_path[i], lm_path[i], lm3d_std)
         data = {
