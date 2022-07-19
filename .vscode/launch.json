@@ -14,7 +14,7 @@
             "args": [
                 "--name=pretrained",
                 "--epoch=20",
-                "--img_folder=/home/ICT2000/jyang/data/ffhq/in-the-wild-images-10"
+                "--img_folder=/home/ICT2000/jyang/data/ffhq/ffhq_512/images"
             ]
         }
     ]
