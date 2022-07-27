@@ -7,6 +7,7 @@ import torch
 from .base_model import BaseModel
 from . import networks
 from .bfm import ParametricFaceModel
+from .bfm import perspective_projection
 from .losses import perceptual_loss, photo_loss, reg_loss, reflectance_loss, landmark_loss
 from util import util 
 from util.nvdiffrast import MeshRenderer
@@ -189,11 +190,25 @@ class FaceReconModel(BaseModel):
             output_vis = self.pred_face * self.pred_mask + (1 - self.pred_mask) * self.input_img
             output_vis_numpy_raw = 255. * output_vis.detach().cpu().permute(0, 2, 3, 1).numpy()
             
+            # landmarks verification
+            lm3d = self.pred_vertex[:,self.facemodel.keypoints] # torch.Size([1, 68, 3])
+            lm3d_proj = self.facemodel.to_image(lm3d) # torch.Size([1, 68, 2])
+            angle = self.pred_coeffs_dict['angle']
+            trans = self.pred_coeffs_dict['trans'].cpu().numpy()[0]
+            R = self.facemodel.compute_rotation(angle).cpu().numpy()
+            k = perspective_projection(self.opt.focal, self.opt.center)
+            # lm3d_proj = lm3d @ k
+            # lm3d_proj = lm3d_proj[...,:2] / lm3d_proj[..., 2:]
+            
+            
             if self.gt_lm is not None:
                 gt_lm_numpy = self.gt_lm.cpu().numpy()
                 pred_lm_numpy = self.pred_lm.detach().cpu().numpy()
-                output_vis_numpy = util.draw_landmarks(output_vis_numpy_raw, gt_lm_numpy, 'b')
-                output_vis_numpy = util.draw_landmarks(output_vis_numpy, pred_lm_numpy, 'r')
+                # output_vis_numpy = util.draw_landmarks(output_vis_numpy_raw, gt_lm_numpy, 'b')
+                # output_vis_numpy = util.draw_landmarks(output_vis_numpy, pred_lm_numpy, 'r')
+                output_vis_numpy = util.draw_landmarks(input_img_numpy, gt_lm_numpy, 'b')
+                output_vis_numpy = util.draw_landmarks(output_vis_numpy, lm3d_proj.cpu().numpy(), 'r')
+                
             
                 output_vis_numpy = np.concatenate((input_img_numpy, 
                                     output_vis_numpy_raw, output_vis_numpy), axis=-2)
@@ -220,7 +235,7 @@ class FaceReconModel(BaseModel):
 
         pred_coeffs = {key:self.pred_coeffs_dict[key].cpu().numpy() for key in self.pred_coeffs_dict}
         pred_lm = self.pred_lm.cpu().numpy()
-        pred_lm = np.stack([pred_lm[:,:,0],self.input_img.shape[2]-1-pred_lm[:,:,1]],axis=2) # transfer to image coordinate
+        # pred_lm = np.stack([pred_lm[:,:,0],self.input_img.shape[2]-1-pred_lm[:,:,1]],axis=2) # transfer to image coordinate
         pred_coeffs['lm68'] = pred_lm
         pred_coeffs['pt3d_68'] = self.pred_vertex[:,self.facemodel.keypoints].cpu().numpy()
 
