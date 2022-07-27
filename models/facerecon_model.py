@@ -191,15 +191,52 @@ class FaceReconModel(BaseModel):
             output_vis_numpy_raw = 255. * output_vis.detach().cpu().permute(0, 2, 3, 1).numpy()
             
             # landmarks verification
-            lm3d = self.pred_vertex[:,self.facemodel.keypoints] # torch.Size([1, 68, 3])
-            lm3d_proj = self.facemodel.to_image(lm3d) # torch.Size([1, 68, 2])
+            lm3d = self.pred_vertex[:,self.facemodel.keypoints].cpu().numpy() # torch.Size([1, 68, 3])
+            # lm3d_proj = self.facemodel.to_image(lm3d) # torch.Size([1, 68, 2])
             angle = self.pred_coeffs_dict['angle']
             trans = self.pred_coeffs_dict['trans'].cpu().numpy()[0]
-            R = self.facemodel.compute_rotation(angle).cpu().numpy()
-            k = perspective_projection(self.opt.focal, self.opt.center)
-            # lm3d_proj = lm3d @ k
-            # lm3d_proj = lm3d_proj[...,:2] / lm3d_proj[..., 2:]
+            R = self.facemodel.compute_rotation(angle).cpu().numpy()[0] # (3, 3)
+            f, c = self.opt.focal, self.opt.center
+            k = np.array([
+                [f, 0, c],
+                [0, f, c],
+                [0, 0, 1],
+            ])
+            # k = perspective_projection(self.opt.focal, self.opt.center)
+            lm3d_proj = lm3d @ k.T
+            lm3d_proj = lm3d_proj[...,:2] / lm3d_proj[..., 2:]
             
+            # face landmakrs to zpos
+            # lm3d_trans = np.array([0., 0., -10.]) + lm3d[0] # from camera space to world space
+            # lm3d_trans = lm3d_trans + trans # from world space to object space
+            # lm3d_trans = lm3d_trans @ R # rotate to Z pos in object space
+            # lm3d_trans = lm3d_trans - trans # from object to world space
+            # lm3d_trans = np.array([0., 0., 10.]) + lm3d_trans # from world space to camera space
+            
+            # define c2w to transform landmarks facing z+
+            c2w = np.eye(4)
+            c2w[:3,:3] = R.T
+
+            # transform to make landmakrs facing z+
+            lm3d_trans = trimesh.PointCloud(lm3d[0])
+            lm3d_trans.apply_translation([0., 0., -10]) # from camera space to world space
+            lm3d_trans.apply_transform(c2w) # rotate to Z pos in object space
+            
+            # define w2c
+            w2c = np.eye(4)
+            w2c[:3,:3] = R.T
+            # w2c[:3,-1] = R @ np.array([0., 0., -10.])
+            c2w = np.linalg.inv(w2c)
+            
+            # transform landmarks facing z+ with c2w
+            lm3d_trans.apply_transform(c2w)
+            lm3d_trans.apply_translation([0., 0., 10]) # from camera space to world space
+            lm3d_trans_proj = lm3d_trans.vertices @ k.T # (1, 68, 3)
+            lm3d_trans_proj = lm3d_trans_proj[...,:2] / lm3d_trans_proj[..., 2:]
+            
+            
+            self.lm3d = lm3d
+            self.lm3d_trans = lm3d_trans.vertices
             
             if self.gt_lm is not None:
                 gt_lm_numpy = self.gt_lm.cpu().numpy()
@@ -207,7 +244,7 @@ class FaceReconModel(BaseModel):
                 # output_vis_numpy = util.draw_landmarks(output_vis_numpy_raw, gt_lm_numpy, 'b')
                 # output_vis_numpy = util.draw_landmarks(output_vis_numpy, pred_lm_numpy, 'r')
                 output_vis_numpy = util.draw_landmarks(input_img_numpy, gt_lm_numpy, 'b')
-                output_vis_numpy = util.draw_landmarks(output_vis_numpy, lm3d_proj.cpu().numpy(), 'r')
+                output_vis_numpy = util.draw_landmarks(output_vis_numpy, lm3d_trans_proj[None,...], 'r')
                 
             
                 output_vis_numpy = np.concatenate((input_img_numpy, 
@@ -230,6 +267,10 @@ class FaceReconModel(BaseModel):
         tri = self.facemodel.face_buf.cpu().numpy()
         mesh = trimesh.Trimesh(vertices=recon_shape, faces=tri, vertex_colors=np.clip(255. * recon_color, 0, 255).astype(np.uint8))
         mesh.export(name)
+        ply = trimesh.PointCloud(vertices=self.lm3d[0])
+        ply.export(name.replace('.obj', '.ply'))
+        ply = trimesh.PointCloud(vertices=self.lm3d_trans)
+        ply.export(name.replace('.obj', '.trans.ply'))
 
     def save_coeff(self,name):
 
